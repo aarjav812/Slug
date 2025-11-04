@@ -481,14 +481,11 @@ def create_app() -> Flask:
         payload = request.get_json(silent=True) or {}
         
         body = payload.get("body", "").strip()
-        user_email = payload.get("email", "")
+        user_email = payload.get("email", "anonymous@example.com")  # Default email if not provided
         user_name = payload.get("name", "Anonymous").strip()
         
         if not body:
             return jsonify({"error": "Comment body required"}), 400
-        
-        if not user_email or "@" not in user_email:
-            return jsonify({"error": "Valid email required"}), 400
 
         try:
             report = Report.query.get_or_404(report_id)

@@ -11,6 +11,8 @@ export default function Home() {
   const [userEmail, setUserEmail] = useState(localStorage.getItem("userEmail") || "");
   const [commentingOn, setCommentingOn] = useState(null);
   const [commentText, setCommentText] = useState("");
+  const [showCommentsFor, setShowCommentsFor] = useState(null);
+  const [comments, setComments] = useState({});
 
   useEffect(() => {
     loadReports(1);
@@ -56,18 +58,35 @@ export default function Home() {
     }
   };
 
-  const handleComment = async (reportId) => {
-    if (!userEmail) {
-      const email = prompt("Enter your email to comment:");
-      if (!email || !email.includes("@")) {
-        alert("Please enter a valid email");
-        return;
-      }
-      setUserEmail(email);
-      localStorage.setItem("userEmail", email);
+  const loadComments = async (reportId) => {
+    try {
+      const data = await getReportComments(reportId);
+      setComments(prev => ({ ...prev, [reportId]: data.comments || [] }));
+    } catch (err) {
+      console.error("Error loading comments:", err);
     }
+  };
 
+  const toggleComments = async (reportId) => {
+    if (showCommentsFor === reportId) {
+      setShowCommentsFor(null);
+    } else {
+      setShowCommentsFor(reportId);
+      if (!comments[reportId]) {
+        await loadComments(reportId);
+      }
+    }
+  };
+
+  const handleComment = async (reportId) => {
     setCommentingOn(reportId);
+    // Also show comments when user clicks to comment
+    if (showCommentsFor !== reportId) {
+      setShowCommentsFor(reportId);
+      if (!comments[reportId]) {
+        await loadComments(reportId);
+      }
+    }
   };
 
   const submitComment = async (reportId) => {
@@ -78,7 +97,7 @@ export default function Home() {
 
     try {
       const userName = prompt("Enter your name (or leave blank for Anonymous):", "Anonymous");
-      const result = await addReportComment(reportId, userEmail, userName || "Anonymous", commentText);
+      const result = await addReportComment(reportId, "anonymous@example.com", userName || "Anonymous", commentText);
       
       // Update the report in the list
       setReports(reports.map(r => 
@@ -87,9 +106,11 @@ export default function Home() {
           : r
       ));
       
+      // Reload comments to show the new one
+      await loadComments(reportId);
+      
       setCommentingOn(null);
       setCommentText("");
-      alert("Comment added successfully!");
     } catch (err) {
       console.error("Error adding comment:", err);
       alert("Failed to add comment. Please try again.");
@@ -359,14 +380,14 @@ export default function Home() {
                   fontSize: '0.875rem'
                 }}>
                   <button 
-                    onClick={() => handleComment(report.id)}
+                    onClick={() => toggleComments(report.id)}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: '0.5rem',
                       background: 'none',
                       border: 'none',
-                      color: '#6b7280',
+                      color: showCommentsFor === report.id ? '#1d9bf0' : '#6b7280',
                       cursor: 'pointer',
                       padding: '0.375rem 0.625rem',
                       borderRadius: '0.5rem',
@@ -378,7 +399,7 @@ export default function Home() {
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.color = '#6b7280';
+                      e.currentTarget.style.color = showCommentsFor === report.id ? '#1d9bf0' : '#6b7280';
                     }}>
                     <MessageCircle size={18} />
                     <span>{report.comment_count || 0}</span>
@@ -509,6 +530,112 @@ export default function Home() {
                         Cancel
                       </button>
                     </div>
+                  </div>
+                )}
+
+                {/* Display Comments */}
+                {showCommentsFor === report.id && (
+                  <div style={{
+                    paddingLeft: '3rem',
+                    marginTop: '0.75rem',
+                    borderTop: '1px solid #e5e7eb',
+                    paddingTop: '0.75rem'
+                  }}>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '0.75rem'
+                    }}>
+                      <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: '#111' }}>
+                        Comments ({comments[report.id]?.length || 0})
+                      </h4>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        {commentingOn !== report.id && (
+                          <button
+                            onClick={() => handleComment(report.id)}
+                            style={{
+                              padding: '0.25rem 0.75rem',
+                              background: '#1d9bf0',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '0.375rem',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Write Comment
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setShowCommentsFor(null)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#6b7280',
+                            fontSize: '0.875rem',
+                            cursor: 'pointer',
+                            padding: '0.25rem 0.5rem'
+                          }}
+                        >
+                          Hide
+                        </button>
+                      </div>
+                    </div>
+
+                    {comments[report.id] && comments[report.id].length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        {comments[report.id].map((comment) => (
+                          <div key={comment.id} style={{
+                            padding: '0.75rem',
+                            background: '#f9fafb',
+                            borderRadius: '0.5rem',
+                            border: '1px solid #e5e7eb'
+                          }}>
+                            <div style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              marginBottom: '0.5rem'
+                            }}>
+                              <span style={{
+                                fontWeight: 600,
+                                fontSize: '0.875rem',
+                                color: '#111'
+                              }}>
+                                {comment.user_name}
+                              </span>
+                              <span style={{
+                                fontSize: '0.75rem',
+                                color: '#9ca3af'
+                              }}>
+                                {formatDate(comment.created_at)}
+                              </span>
+                            </div>
+                            <p style={{
+                              margin: 0,
+                              fontSize: '0.875rem',
+                              color: '#374151',
+                              lineHeight: 1.5,
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: 'break-word'
+                            }}>
+                              {comment.body}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{
+                        color: '#9ca3af',
+                        fontSize: '0.875rem',
+                        textAlign: 'center',
+                        padding: '1rem',
+                        margin: 0
+                      }}>
+                        No comments yet. Be the first to comment!
+                      </p>
+                    )}
                   </div>
                 )}
               </article>
