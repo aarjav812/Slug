@@ -56,10 +56,48 @@ export async function postMessage(ticket, code, body) {
   }
 }
 
-export async function fetchPublicReports() {
+export async function fetchPublicReports(page = 1, perPage = 20) {
   try {
-    const r = await fetch(`${API}/api/v1/reports/public`);
+    const r = await fetch(`${API}/api/v1/reports/public?page=${page}&per_page=${perPage}`);
     if (!r.ok) throw new Error(`Fetch reports failed: ${r.status}`);
+    return r.json();
+  } catch (error) {
+    handleFetchError(error);
+  }
+}
+
+export async function likeReport(reportId, email) {
+  try {
+    const r = await fetch(`${API}/api/v1/reports/${reportId}/like`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email })
+    });
+    if (!r.ok) throw new Error(`Like failed: ${r.status}`);
+    return r.json();
+  } catch (error) {
+    handleFetchError(error);
+  }
+}
+
+export async function addReportComment(reportId, email, name, body) {
+  try {
+    const r = await fetch(`${API}/api/v1/reports/${reportId}/comments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, name, body })
+    });
+    if (!r.ok) throw new Error(`Comment failed: ${r.status}`);
+    return r.json();
+  } catch (error) {
+    handleFetchError(error);
+  }
+}
+
+export async function getReportComments(reportId) {
+  try {
+    const r = await fetch(`${API}/api/v1/reports/${reportId}/comments`);
+    if (!r.ok) throw new Error(`Fetch comments failed: ${r.status}`);
     return r.json();
   } catch (error) {
     handleFetchError(error);

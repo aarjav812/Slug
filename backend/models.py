@@ -86,3 +86,27 @@ class Save(db.Model):
     __table_args__ = (
         db.UniqueConstraint("post_id", "user_id", name="uq_save_post_user"),
     )
+
+
+class ReportLike(db.Model):
+    __tablename__ = "report_likes"
+    id = db.Column(db.Integer, primary_key=True)
+    report_id = db.Column(db.Integer, db.ForeignKey("reports.id", ondelete="CASCADE"), nullable=False)
+    user_email = db.Column(db.String(255), nullable=False)  # Anonymous users can like
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("report_id", "user_email", name="uq_report_like_user"),
+    )
+
+
+class ReportComment(db.Model):
+    __tablename__ = "report_comments"
+    id = db.Column(db.Integer, primary_key=True)
+    report_id = db.Column(db.Integer, db.ForeignKey("reports.id", ondelete="CASCADE"), nullable=False)
+    user_email = db.Column(db.String(255), nullable=False)  # Anonymous users can comment
+    user_name = db.Column(db.String(120), nullable=False, default="Anonymous")
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    report = db.relationship("Report", backref="public_comments")

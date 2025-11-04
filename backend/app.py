@@ -20,7 +20,7 @@ from sqlalchemy import text
 
 from config import Config
 from database import db
-from models import Report, Message, User, Post, Comment, Like, Save
+from models import Report, Message, User, Post, Comment, Like, Save, ReportLike, ReportComment
 from schemas import (
     ReportCreateSchema, MessageCreateSchema, ReportPublicSchema,
     RegisterSchema, LoginSchema, UserPublicSchema, CommentPublicSchema
@@ -298,15 +298,29 @@ def create_app() -> Flask:
 
     @app.get("/api/v1/reports/public")
     def get_public_reports():
-        """Get public whistleblower reports for the main feed"""
+        """Get public whistleblower reports for the main feed with pagination"""
         # Lazy initialization: ensure tables exist on first request
         try:
             db.create_all()
         except Exception as init_error:
             print(f"⚠ Lazy DB init warning in get_public_reports: {init_error}")
         
+        # Pagination parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        
+        # Limit per_page to prevent abuse
+        per_page = min(per_page, 100)
+        
         try:
-            reports = Report.query.filter_by(status="open").order_by(Report.created_at.desc()).limit(20).all()
+            # Use pagination
+            pagination = Report.query.filter_by(status="open").order_by(Report.created_at.desc()).paginate(
+                page=page, 
+                per_page=per_page, 
+                error_out=False
+            )
+            reports = pagination.items
+            
         except Exception as e:
             # Database connection error
             app.logger.error(f"Database error in get_public_reports: {e}")
@@ -318,8 +332,12 @@ def create_app() -> Flask:
 
         items = []
         for rpt in reports:
+            # Get actual like and comment counts
+            like_count = ReportLike.query.filter_by(report_id=rpt.id).count()
+            comment_count = ReportComment.query.filter_by(report_id=rpt.id).count()
+            
             items.append({
-                "id": f"report_{rpt.id}",
+                "id": rpt.id,  # Use actual report ID for frontend operations
                 "type": "report",
                 "ticket": rpt.ticket,
                 "title": rpt.title,
@@ -333,14 +351,24 @@ def create_app() -> Flask:
                     "avatar_url": "https://via.placeholder.com/40x40/ffd700/000000?text=W",
                     "verified": True,
                 },
-                "like_count": 0,
-                "comment_count": len(rpt.messages),
+                "like_count": like_count,
+                "comment_count": comment_count,
                 "liked": False,
                 "saved": False,
                 "status": rpt.status,
             })
 
-        return jsonify({"reports": items}), 200
+        return jsonify({
+            "reports": items,
+            "pagination": {
+                "page": pagination.page,
+                "per_page": pagination.per_page,
+                "total": pagination.total,
+                "pages": pagination.pages,
+                "has_next": pagination.has_next,
+                "has_prev": pagination.has_prev
+            }
+        }), 200
 
     @app.post("/api/v1/reports")
     def create_report():
@@ -405,6 +433,82 @@ def create_app() -> Flask:
         db.session.commit()
 
         return jsonify({"message": "Message posted", "id": msg.id}), 201
+
+    @app.post("/api/v1/reports/<int:report_id>/like")
+    def like_report(report_id: int):
+        """Like or unlike a report. Anonymous users can like using email."""
+        payload = request.get_json(silent=True) or {}
+        user_email = payload.get("email", "anonymous@example.com")
+        
+        if not user_email or "@" not in user_email:
+            return jsonify({"error": "Valid email required"}), 400
+        
+        report = Report.query.get_or_404(report_id)
+        existing = ReportLike.query.filter_by(report_id=report.id, user_email=user_email).first()
+        
+        if existing:
+            db.session.delete(existing)
+            db.session.commit()
+            liked = False
+        else:
+            like = ReportLike(report_id=report.id, user_email=user_email)
+            db.session.add(like)
+            db.session.commit()
+            liked = True
+
+        like_count = ReportLike.query.filter_by(report_id=report.id).count()
+        return jsonify({"liked": liked, "like_count": like_count}), 200
+
+    @app.post("/api/v1/reports/<int:report_id>/comments")
+    def add_report_comment(report_id: int):
+        """Add a comment to a report. Anonymous users can comment."""
+        payload = request.get_json(silent=True) or {}
+        
+        body = payload.get("body", "").strip()
+        user_email = payload.get("email", "")
+        user_name = payload.get("name", "Anonymous").strip()
+        
+        if not body:
+            return jsonify({"error": "Comment body required"}), 400
+        
+        if not user_email or "@" not in user_email:
+            return jsonify({"error": "Valid email required"}), 400
+
+        report = Report.query.get_or_404(report_id)
+        comment = ReportComment(
+            report_id=report.id,
+            user_email=user_email,
+            user_name=user_name,
+            body=body
+        )
+        db.session.add(comment)
+        db.session.commit()
+        
+        comment_count = ReportComment.query.filter_by(report_id=report.id).count()
+        return jsonify({
+            "comment": {
+                "id": comment.id,
+                "user_name": comment.user_name,
+                "body": comment.body,
+                "created_at": comment.created_at.isoformat()
+            },
+            "comment_count": comment_count
+        }), 201
+
+    @app.get("/api/v1/reports/<int:report_id>/comments")
+    def get_report_comments(report_id: int):
+        """Get all comments for a report."""
+        report = Report.query.get_or_404(report_id)
+        comments = ReportComment.query.filter_by(report_id=report.id).order_by(ReportComment.created_at.desc()).all()
+        
+        return jsonify({
+            "comments": [{
+                "id": c.id,
+                "user_name": c.user_name,
+                "body": c.body,
+                "created_at": c.created_at.isoformat()
+            } for c in comments]
+        }), 200
 
     # -----------------------
     # Error Handlers
