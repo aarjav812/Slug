@@ -72,9 +72,8 @@ export default function Home() {
       setShowCommentsFor(null);
     } else {
       setShowCommentsFor(reportId);
-      if (!comments[reportId]) {
-        await loadComments(reportId);
-      }
+      // Always load comments when toggling, to ensure fresh data
+      await loadComments(reportId);
     }
   };
 
@@ -83,9 +82,8 @@ export default function Home() {
     // Also show comments when user clicks to comment
     if (showCommentsFor !== reportId) {
       setShowCommentsFor(reportId);
-      if (!comments[reportId]) {
-        await loadComments(reportId);
-      }
+      // Always load comments to ensure fresh data
+      await loadComments(reportId);
     }
   };
 
