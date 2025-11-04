@@ -437,31 +437,47 @@ def create_app() -> Flask:
     @app.post("/api/v1/reports/<int:report_id>/like")
     def like_report(report_id: int):
         """Like or unlike a report. Anonymous users can like using email."""
+        # Ensure tables exist
+        try:
+            db.create_all()
+        except Exception as e:
+            print(f"⚠ Table creation warning: {e}")
+        
         payload = request.get_json(silent=True) or {}
         user_email = payload.get("email", "anonymous@example.com")
         
         if not user_email or "@" not in user_email:
             return jsonify({"error": "Valid email required"}), 400
         
-        report = Report.query.get_or_404(report_id)
-        existing = ReportLike.query.filter_by(report_id=report.id, user_email=user_email).first()
-        
-        if existing:
-            db.session.delete(existing)
-            db.session.commit()
-            liked = False
-        else:
-            like = ReportLike(report_id=report.id, user_email=user_email)
-            db.session.add(like)
-            db.session.commit()
-            liked = True
+        try:
+            report = Report.query.get_or_404(report_id)
+            existing = ReportLike.query.filter_by(report_id=report.id, user_email=user_email).first()
+            
+            if existing:
+                db.session.delete(existing)
+                db.session.commit()
+                liked = False
+            else:
+                like = ReportLike(report_id=report.id, user_email=user_email)
+                db.session.add(like)
+                db.session.commit()
+                liked = True
 
-        like_count = ReportLike.query.filter_by(report_id=report.id).count()
-        return jsonify({"liked": liked, "like_count": like_count}), 200
+            like_count = ReportLike.query.filter_by(report_id=report.id).count()
+            return jsonify({"liked": liked, "like_count": like_count}), 200
+        except Exception as e:
+            app.logger.error(f"Error in like_report: {e}")
+            return jsonify({"error": "Failed to like report", "details": str(e)}), 500
 
     @app.post("/api/v1/reports/<int:report_id>/comments")
     def add_report_comment(report_id: int):
         """Add a comment to a report. Anonymous users can comment."""
+        # Ensure tables exist
+        try:
+            db.create_all()
+        except Exception as e:
+            print(f"⚠ Table creation warning: {e}")
+        
         payload = request.get_json(silent=True) or {}
         
         body = payload.get("body", "").strip()
@@ -474,26 +490,30 @@ def create_app() -> Flask:
         if not user_email or "@" not in user_email:
             return jsonify({"error": "Valid email required"}), 400
 
-        report = Report.query.get_or_404(report_id)
-        comment = ReportComment(
-            report_id=report.id,
-            user_email=user_email,
-            user_name=user_name,
-            body=body
-        )
-        db.session.add(comment)
-        db.session.commit()
-        
-        comment_count = ReportComment.query.filter_by(report_id=report.id).count()
-        return jsonify({
-            "comment": {
-                "id": comment.id,
-                "user_name": comment.user_name,
-                "body": comment.body,
-                "created_at": comment.created_at.isoformat()
-            },
-            "comment_count": comment_count
-        }), 201
+        try:
+            report = Report.query.get_or_404(report_id)
+            comment = ReportComment(
+                report_id=report.id,
+                user_email=user_email,
+                user_name=user_name,
+                body=body
+            )
+            db.session.add(comment)
+            db.session.commit()
+            
+            comment_count = ReportComment.query.filter_by(report_id=report.id).count()
+            return jsonify({
+                "comment": {
+                    "id": comment.id,
+                    "user_name": comment.user_name,
+                    "body": comment.body,
+                    "created_at": comment.created_at.isoformat()
+                },
+                "comment_count": comment_count
+            }), 201
+        except Exception as e:
+            app.logger.error(f"Error in add_report_comment: {e}")
+            return jsonify({"error": "Failed to add comment", "details": str(e)}), 500
 
     @app.get("/api/v1/reports/<int:report_id>/comments")
     def get_report_comments(report_id: int):
