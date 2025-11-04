@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Search, MessageCircle, Heart, Share2, MoreHorizontal } from "lucide-react";
-import { fetchPublicReports, likeReport, addReportComment } from "../api";
+import { fetchPublicReports, likeReport, addReportComment, getReportComments } from "../api";
 
 export default function Home() {
   const [reports, setReports] = useState([]);
